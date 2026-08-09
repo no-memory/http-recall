@@ -195,7 +195,7 @@ func buildRequestClient(opt *ClientOpt, r *int64, w *int64) (*fasthttp.HostClien
 	httpClient := &fasthttp.HostClient{
 		Addr:                          addMissingPort(u.Host, u.Scheme == "https"),
 		IsTLS:                         u.Scheme == "https",
-		Name:                          "plow",
+		Name:                          "http-recall",
 		MaxConns:                      opt.maxConns,
 		ReadTimeout:                   opt.readTimeout,
 		WriteTimeout:                  opt.writeTimeout,

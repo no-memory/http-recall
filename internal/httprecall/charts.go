@@ -242,7 +242,7 @@ func NewCharts(ln net.Listener, dataFunc func() *ChartsReport, desc string) (*Ch
 
 	c := &Charts{ln: ln, dataFunc: dataFunc}
 	c.page = components.NewPage()
-	c.page.PageTitle = "plow"
+	c.page.PageTitle = "http-recall"
 	c.page.AssetsHost = assetsPath
 	c.page.Assets.JSAssets.Add("jquery.min.js")
 	c.page.AddCharts(c.newLatencyView(), c.newRPSView(), c.newCodeView(), c.newConcurrencyView())

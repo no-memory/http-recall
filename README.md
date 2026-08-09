@@ -1,26 +1,27 @@
-# plow <!-- omit in toc -->
+# HTTP Recall <!-- omit in toc -->
 
-[![build](https://github.com/six-ddc/plow/actions/workflows/release.yml/badge.svg)](https://github.com/six-ddc/plow/actions/workflows/release.yml)
-[![Homebrew](https://img.shields.io/badge/dynamic/json.svg?url=https://formulae.brew.sh/api/formula/plow.json&query=$.versions.stable&label=homebrew)](https://formulae.brew.sh/formula/plow)
 [![GitHub license](https://img.shields.io/github/license/six-ddc/plow.svg)](https://github.com/six-ddc/plow/blob/main/LICENSE)
 [![made-with-Go](https://img.shields.io/badge/Made%20with-Go-1f425f.svg)](http://golang.org)
 
-Plow is an HTTP(S) benchmarking tool, written in Golang. It uses
+HTTP Recall is an HTTP(S) benchmarking **and log-replay** tool, written in Golang. It uses
 excellent [fasthttp](https://github.com/valyala/fasthttp#http-client-comparison-with-nethttp) instead of Go's default
 net/http due to its lightning fast performance.
 
-Plow runs at a specified connections(option `-c`) concurrently and **real-time** records a summary statistics, histogram
-of execution time and calculates percentiles to display on Web UI and terminal. It can run for a set duration(
-option `-d`), for a fixed number of requests(option `-n`), or until Ctrl-C interrupted.
+It ships two modes that share the same stats / terminal / web-chart pipeline:
 
-The implementation of real-time computing Histograms and Quantiles using stream-based algorithms inspired
-by [prometheus](https://github.com/prometheus/client_golang) with low memory and CPU bounds. so it's almost no
+- **Benchmark** — run at a specified concurrency (`-c`) and real-time record summary statistics, histogram of
+  execution time and percentiles, displayed on Web UI and terminal. Run for a duration (`-d`), a fixed number of
+  requests (`-n`), or until Ctrl-C.
+- **Replay** — replay a timestamped request set (e.g. derived from Splunk access logs) against a target environment,
+  preserving the relative timing between requests. Supports speed compression (`--speed`), window slicing
+  (`--replay-start/--replay-end`), VU-bounded concurrency and failure policies. See [REPLAY.md](REPLAY.md).
+
+The real-time histograms and quantiles use stream-based algorithms inspired
+by [prometheus](https://github.com/prometheus/client_golang) with low memory and CPU bounds, so there is almost no
 additional performance overhead for benchmarking.
 
-![](https://github.com/six-ddc/plow/blob/main/demo.gif?raw=true)
-
 ```text
-❯ ./plow http://127.0.0.1:8080/hello -c 20
+❯ httprecall http://127.0.0.1:8080/hello -c 20
 Benchmarking http://127.0.0.1:8080/hello using 20 connection(s).
 @ Real-time charts is listening on http://[::]:18888
 
@@ -52,54 +53,60 @@ Latency Histogram:
   524µs       3
 ```
 
+Replay mode:
+
+```text
+❯ httprecall http://staging.internal --replay-file demo/replay-orders.json --speed 5 -c 200
+Replaying 18 request(s) at 5.0x speed with 200 VU → http://staging.internal
+```
+
 - [Installation](#installation)
-    - [Via Go](#via-go)
-    - [Via Homebrew](#via-homebrew)
-    - [Via Docker](#via-docker)
 - [Usage](#usage)
+    - [Benchmark mode](#benchmark-mode)
+    - [Replay mode](#replay-mode)
     - [Options](#options)
     - [Examples](#examples)
-- [Stargazers](#Stargazers)
+- [Project layout](#project-layout)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ## Installation
 
-Binary and image distributions are available through the [releases](https://github.com/six-ddc/plow/releases)
-assets page.
-
-### Via Go
+### Build from source
 
 ```bash
-go install github.com/six-ddc/plow@latest
-```
-
-### Via Homebrew
-
-```sh
-# brew update
-brew install plow
-```
-
-### Via Docker
-
-```bash
-docker run --rm --net=host ghcr.io/six-ddc/plow
-# docker run --rm -p 18888:18888 ghcr.io/six-ddc/plow
+git clone <this-repo> && cd http-recall
+GOPROXY=https://goproxy.cn,direct go build -o httprecall ./cmd/httprecall
 ```
 
 ## Usage
 
+### Benchmark mode
+
+```bash
+httprecall http://127.0.0.1:8080/ -c 20 -n 10000 -d 10s
+```
+
+### Replay mode
+
+```bash
+httprecall http://target.internal --replay-file demo/replay-orders.json --speed 2 -c 8
+```
+
+See [REPLAY.md](REPLAY.md) for the request-set format and replay options.
+
 ### Options
 
 ```bash
-usage: plow [<flags>] <url>
+usage: httprecall [<flags>] <url>
 
-A high-performance HTTP benchmarking tool with real-time web UI and terminal displaying
+An HTTP(S) benchmark and log-replay tool with real-time web UI and terminal displaying
 
 Examples:
 
-  plow http://127.0.0.1:8080/ -c 20 -n 100000
-  plow https://httpbin.org/post -c 20 -d 5m --body @file.json -T 'application/json' -m POST
+  httprecall http://127.0.0.1:8080/ -c 20 -n 100000
+  httprecall https://httpbin.org/post -c 20 -d 5m --body @file.json -T 'application/json' -m POST
+  httprecall http://127.0.0.1:8080 --replay-file demo/replay-orders.json --speed 5 -c 200
 
 Flags:
       --help                     Show context-sensitive help.
@@ -111,6 +118,11 @@ Flags:
   -i, --interval=200ms           Print snapshot result every interval, use 0 to print once at the end
       --seconds                  Use seconds as time unit to print
       --json                     Print snapshot result as JSON
+      --replay-file=REPLAY-FILE  Replay a timestamped request set (JSON) instead of benchmarking
+      --speed=1                  Replay time compression factor, e.g. 1 2 5 10 30
+      --fail-policy=continue     Replay failure policy: continue|pause|abort
+      --replay-start=0           Replay: skip requests before this offset, e.g. 30s 5m
+      --replay-end=0             Replay: skip requests at/after this offset, e.g. 10m
   -b, --body=BODY                HTTP request body, if body starts with '@' the rest will be considered a file's path from which to read the actual body content
       --stream                   Specify whether to stream file specified by '--body @file' using chunked encoding or to read into memory
   -m, --method="GET"             HTTP method
@@ -130,13 +142,13 @@ Flags:
                                  Set HTTP proxy
       --auto-open-browser        Specify whether auto open browser to show web charts
       --[no-]clean               Clean the histogram bar once its finished. Default is true
-      --output-errors=OUTPUT-ERRORS  
+      --output-errors=OUTPUT-ERRORS
                                  Output errors to file
       --summary                  Only print the summary without realtime reports
       --unix-socket=UNIX-SOCKET  Unix domain socket path to use for connection
       --version                  Show application version.
 
-  Flags default values also read from env PLOW_SOME_FLAG, such as PLOW_TIMEOUT=5s equals to --timeout=5s
+  Flags default values also read from env HTTPRECALL_SOME_FLAG, such as HTTPRECALL_TIMEOUT=5s equals to --timeout=5s
 
 Args:
   <url>  Request url
@@ -144,31 +156,39 @@ Args:
 
 ### Examples
 
-Basic usage:
+Basic benchmark:
 
 ```bash
-plow http://127.0.0.1:8080/ -c 20 -n 10000 -d 10s
+httprecall http://127.0.0.1:8080/ -c 20 -n 10000 -d 10s
 ```
 
 POST a json file:
 
 ```bash
-plow https://httpbin.org/post -c 20 --body @file.json -T 'application/json' -m POST
+httprecall https://httpbin.org/post -c 20 --body @file.json -T 'application/json' -m POST
 ```
 
-### Bash/ZSH Shell Completion
+Replay a spike window 10x faster:
 
 ```bash
-# Add the statement to their bash_profile (or equivalent):
-eval "$(plow --completion-script-bash)"
-# Or for ZSH
-eval "$(plow --completion-script-zsh)"
+httprecall http://staging.internal --replay-file demo/replay-orders.json --speed 10 -c 500
 ```
 
-## Stargazers
+## Project layout
 
-[![Stargazers over time](https://starchart.cc/six-ddc/plow.svg)](https://starchart.cc/six-ddc/plow)
+```
+cmd/httprecall/          CLI entry (kingpin flags → Config)
+internal/httprecall/     engine: benchmark + replay schedulers, stats, terminal & web UI
+bench_server/            throwaway HTTP server for local testing
+demo/                    sample replay request sets
+preview/ tui/            design prototypes (Open Design HTML / Textual TUI)
+```
+
+## Acknowledgements
+
+Forked from [plow](https://github.com/six-ddc/plow) (Apache-2.0, © six-ddc). The benchmark engine, real-time
+stats and web charts are derived from plow; replay mode is an original addition.
 
 ## License
 
-See [LICENSE](https://github.com/six-ddc/plow/blob/master/LICENSE).
+See [LICENSE](LICENSE).

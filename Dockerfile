@@ -1,3 +1,3 @@
 FROM scratch
-COPY plow /usr/bin/plow
-ENTRYPOINT ["/usr/bin/plow"]
+COPY httprecall /usr/bin/httprecall
+ENTRYPOINT ["/usr/bin/httprecall"]

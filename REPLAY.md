@@ -1,29 +1,29 @@
 # Replay mode (新增功能)
 
-在 plow 压测能力之上新增的**请求回放**模式：按日志 `_time` 时间差还原真实请求节奏，
-可倍速压缩、裁剪窗口、限制并发，全部复用 plow 的统计 / 终端 / Web 图表管线。
+在压测能力之上新增的**请求回放**模式：按日志 `_time` 时间差还原真实请求节奏，
+可倍速压缩、裁剪窗口、限制并发，全部复用同一套统计 / 终端 / Web 图表管线。
 
 ## 用法
 
 ```bash
 # 构建
-GOPROXY=https://goproxy.cn,direct go build -o plow ./cmd/httprecall
+GOPROXY=https://goproxy.cn,direct go build -o httprecall ./cmd/httprecall
 
 # 回放请求集（默认 1x 倍速）
-./plow http://target.internal --replay-file demo/replay-orders.json
+./httprecall http://target.internal --replay-file demo/replay-orders.json
 
 # 2x 倍速 + 8 并发 + 只看 30s~10m 窗口
-./plow http://target.internal \
+./httprecall http://target.internal \
   --replay-file demo/replay-orders.json \
   --speed 2 --concurrency 8 \
   --replay-start 30s --replay-end 10m
 
 # 失败即终止 / 连续失败暂停
-./plow http://target.internal --replay-file set.json --fail-policy abort
-./plow http://target.internal --replay-file set.json --fail-policy pause
+./httprecall http://target.internal --replay-file set.json --fail-policy abort
+./httprecall http://target.internal --replay-file set.json --fail-policy pause
 
 # 实时 Web 图表（默认 :18888）
-./plow http://target.internal --replay-file set.json --listen :18888
+./httprecall http://target.internal --replay-file set.json --listen :18888
 ```
 
 ## 请求集格式
@@ -45,7 +45,7 @@ GOPROXY=https://goproxy.cn,direct go build -o plow ./cmd/httprecall
 
 ## 与压测模式的关系
 
-| | 压测（原 plow） | 回放（新增） |
+| | 压测（基准模式） | 回放（新增） |
 |---|---|---|
 | 调度模型 | goroutine 池 + rate limiter | 时间戳序列 + 倍速压缩 |
 | 请求模板 | 单一 URL/method/body | 每请求独立 spec |

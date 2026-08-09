@@ -94,7 +94,7 @@ func TestBuildRequestClientRejectsInvalidHeader(t *testing.T) {
 }
 
 func TestBuildRequestClientUsesUnixSocket(t *testing.T) {
-	socketPath := filepath.Join("/tmp", fmt.Sprintf("plow-%d.sock", time.Now().UnixNano()))
+	socketPath := filepath.Join("/tmp", fmt.Sprintf("httprecall-%d.sock", time.Now().UnixNano()))
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
 		t.Fatal(err)

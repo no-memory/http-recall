@@ -67,7 +67,7 @@ var (
 var version = "dev"
 
 func errAndExit(msg string) {
-	fmt.Fprintln(os.Stderr, "plow: "+msg)
+	fmt.Fprintln(os.Stderr, "http-recall: "+msg)
 	os.Exit(1)
 }
 
@@ -100,9 +100,9 @@ var CompactUsageTemplate = `{{define "FormatCommand" -}}
 {{end -}}
 Examples:
 
-  plow http://127.0.0.1:8080/ -c 20 -n 100000
-  plow https://httpbin.org/post -c 20 -d 5m --body @file.json -T 'application/json' -m POST
-  plow http://127.0.0.1:8080 --replay-file demo/replay-orders.json --speed 5 -c 200
+  httprecall http://127.0.0.1:8080/ -c 20 -n 100000
+  httprecall https://httpbin.org/post -c 20 -d 5m --body @file.json -T 'application/json' -m POST
+  httprecall http://127.0.0.1:8080 --replay-file demo/replay-orders.json --speed 5 -c 200
 
 {{if .Context.Flags -}}
 {{T "Flags:"}}
@@ -191,9 +191,9 @@ func rateFlag(c *kingpin.Clause) (target *rateFlagValue) {
 func main() {
 	kingpin.UsageTemplate(CompactUsageTemplate).
 		Version(version).
-		Author("six-ddc@github").
+		Author("http-recall").
 		Resolver(kingpin.PrefixedEnvarResolver("PLOW_", ";")).
-		Help = `A high-performance HTTP benchmarking tool with real-time web UI and terminal displaying`
+		Help = `An HTTP(S) benchmark and log-replay tool with real-time web UI and terminal displaying`
 	kingpin.Parse()
 
 	if *requests >= 0 && *requests < int64(*concurrency) {
