@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"httprecall/internal/httprecall"
 )
@@ -33,7 +33,7 @@ func TestModelViewRendersDashboard(t *testing.T) {
 	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, nil)
 	m.last = m.Snapshot()
 
-	v := m.View()
+	v := m.View().Content
 	for _, want := range []string{"HTTP·RECALL", "ELAPSED", "3s", "18,420", "2,340.5", "99.84%", "P99", "298ms", "2xx"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q\n---\n%s", want, v)
@@ -43,7 +43,7 @@ func TestModelViewRendersDashboard(t *testing.T) {
 
 func TestModelQuitsOnQ(t *testing.T) {
 	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, nil)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd == nil {
 		t.Fatal("expected quit command on 'q'")
 	}

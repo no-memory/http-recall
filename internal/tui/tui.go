@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 
 	"httprecall/internal/httprecall"
@@ -104,7 +104,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // ── view ──────────────────────────────────────────────────────────────────
 
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	rs := m.last
 	if rs == nil {
 		rs = &httprecall.SnapshotReport{}
@@ -138,7 +138,7 @@ func (m Model) View() string {
 	// footer
 	b.WriteString(dim.Render("q / ctrl+c quit"))
 
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 func kpi(label, value string, valueStyle lipgloss.Style) string {
@@ -225,7 +225,7 @@ func (Renderer) Render(report *httprecall.StreamReport, desc string) error {
 // RunProgram boots a full-screen Bubble Tea app for the given snapshot feed
 // and blocks until the run completes (done closes) or the user quits.
 func RunProgram(snapFn func() *httprecall.SnapshotReport, done <-chan struct{}) error {
-	p := tea.NewProgram(New(snapFn, done), tea.WithAltScreen())
+	p := tea.NewProgram(New(snapFn, done))
 	_, err := p.Run()
 	return err
 }
