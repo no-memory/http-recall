@@ -23,6 +23,7 @@ var (
 	rpsView         = "rps"
 	codeView        = "code"
 	concurrencyView = "concurrency"
+	progressView    = "progress"
 	timeFormat      = "15:04:05"
 )
 
@@ -32,13 +33,14 @@ type Metrics struct {
 }
 
 type Charts struct {
-	ln       net.Listener
-	dataFunc func() *ChartsReport
+	ln           net.Listener
+	dataFunc     func() *ChartsReport
+	progressFunc func() ReplayProgress
 }
 
-func NewCharts(ln net.Listener, dataFunc func() *ChartsReport, desc string) (*Charts, error) {
-	c := &Charts{ln: ln, dataFunc: dataFunc}
-	return c, nil
+// NewCharts builds the realtime web UI. progressFunc is nil in benchmark mode.
+func NewCharts(ln net.Listener, dataFunc func() *ChartsReport, progressFunc func() ReplayProgress, desc string) (*Charts, error) {
+	return &Charts{ln: ln, dataFunc: dataFunc, progressFunc: progressFunc}, nil
 }
 
 func (c *Charts) Handler(ctx *fasthttp.RequestCtx) {
@@ -71,6 +73,19 @@ func (c *Charts) Handler(ctx *fasthttp.RequestCtx) {
 		case concurrencyView:
 			if reportData != nil {
 				values = append(values, reportData.Concurrency)
+			} else {
+				values = append(values, nil)
+			}
+		case progressView:
+			if c.progressFunc != nil {
+				p := c.progressFunc()
+				values = append(values, map[string]any{
+					"sent":     p.Sent,
+					"total":    p.Total,
+					"speed":    p.Speed,
+					"sim_ms":   float64(p.SimTime) / 1e6,
+					"vu":       p.VU,
+				})
 			} else {
 				values = append(values, nil)
 			}

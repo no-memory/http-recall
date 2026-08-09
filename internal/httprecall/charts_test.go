@@ -24,7 +24,7 @@ func newTestCharts(t *testing.T, dataFunc func() *ChartsReport) *Charts {
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
-	charts, err := NewCharts(ln, dataFunc, "test benchmark")
+	charts, err := NewCharts(ln, dataFunc, nil, "test benchmark")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,5 +187,49 @@ func TestChartsHandlerServesPageAndNotFound(t *testing.T) {
 	missing := handleChartRequest(charts, "/missing")
 	if missing.StatusCode() != fasthttp.StatusNotFound {
 		t.Fatalf("missing status=%d, want 404", missing.StatusCode())
+	}
+}
+
+func TestChartsHandlerProgressEndpoint(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	charts, err := NewCharts(ln, func() *ChartsReport { return nil },
+		func() ReplayProgress {
+			return ReplayProgress{Sent: 4, Total: 5, Speed: 2, SimTime: 3619 * time.Millisecond, VU: 10}
+		}, "replay test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := decodeChartResponse(t, handleChartRequest(charts, apiPath+progressView))
+	if len(got.Values) != 1 {
+		t.Fatalf("values len = %d, want 1", len(got.Values))
+	}
+	var p struct {
+		Sent   int64   `json:"sent"`
+		Total  int64   `json:"total"`
+		Speed  float64 `json:"speed"`
+		SimMS  float64 `json:"sim_ms"`
+		VU     int     `json:"vu"`
+	}
+	if err := json.Unmarshal(got.Values[0], &p); err != nil {
+		t.Fatalf("progress payload invalid: %v", err)
+	}
+	if p.Sent != 4 || p.Total != 5 || p.Speed != 2 || p.VU != 10 {
+		t.Fatalf("progress = %+v", p)
+	}
+	if p.SimMS < 3618 || p.SimMS > 3620 {
+		t.Fatalf("sim_ms = %v, want ~3619", p.SimMS)
+	}
+
+	// benchmark mode (nil progress func) returns null
+	charts2 := newTestCharts(t, func() *ChartsReport { return nil })
+	got2 := decodeChartResponse(t, handleChartRequest(charts2, apiPath+progressView))
+	if string(got2.Values[0]) != "null" {
+		t.Fatalf("benchmark progress = %s, want null", got2.Values[0])
 	}
 }

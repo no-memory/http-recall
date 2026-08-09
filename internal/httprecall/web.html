@@ -39,6 +39,11 @@ canvas{display:block;width:100%;height:260px}
 .code .bar i{display:block;height:100%;border-radius:3px}
 .c-2xx .n{color:var(--buy)} .c-3xx .n{color:var(--fg2)}
 .c-4xx .n{color:var(--warn)} .c-5xx .n{color:var(--sell)}
+.prog-bar{height:10px;border-radius:5px;background:#101a2b;overflow:hidden}
+.prog-bar i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#0ea5e9,#38bdf8);box-shadow:0 0 10px rgba(56,189,248,.6);transition:width .4s}
+.prog-nums{display:flex;gap:26px;margin-top:8px;font-size:11.5px;color:var(--fg2);flex-wrap:wrap}
+.prog-nums b{color:var(--accent);font-weight:700}
+.prog-nums span:nth-child(1) b{color:var(--buy)}
 .foot{color:var(--dim);font-size:11px;text-align:center;margin-top:6px}
 </style>
 </head>
@@ -51,6 +56,19 @@ canvas{display:block;width:100%;height:260px}
   <span class="tk"><div class="k">LAT P99</div><div class="v w" id="t-p99">—</div></span>
   <span class="tk"><div class="k">2XX</div><div class="v up" id="t-2xx">—</div></span>
   <span class="tk"><div class="k">5XX</div><div class="v dn" id="t-5xx">—</div></span>
+</div>
+
+<div class="panel" id="prog-panel" style="display:none">
+  <div class="panel-h">REPLAY PROGRESS <b id="prog-meta"></b></div>
+  <div style="padding:14px 18px">
+    <div class="prog-bar"><i id="prog-fill"></i></div>
+    <div class="prog-nums">
+      <span>SENT <b id="prog-sent">0 / 0</b></span>
+      <span>SPEED <b id="prog-speed">1×</b></span>
+      <span>SIM <b id="prog-sim">0s</b></span>
+      <span>VU <b id="prog-vu">0</b></span>
+    </div>
+  </div>
 </div>
 
 <div class="panel">
@@ -125,6 +143,20 @@ canvas{display:block;width:100%;height:260px}
   }
 
   function tick(){
+    fetchJSON('/data/progress', function(d){
+      var p = d.values[0];
+      var el = document.getElementById('prog-panel');
+      if (p == null) { el.style.display = 'none'; return; }
+      el.style.display = 'block';
+      var pct = p.total > 0 ? (p.sent / p.total * 100) : 0;
+      document.getElementById('prog-fill').style.width = pct.toFixed(1) + '%';
+      document.getElementById('prog-meta').textContent = pct.toFixed(1) + '%';
+      document.getElementById('prog-sent').textContent =
+        fmt(p.sent) + ' / ' + fmt(p.total);
+      document.getElementById('prog-speed').textContent = p.speed + '×';
+      document.getElementById('prog-sim').textContent = fmt(Math.round(p.sim_ms)) + 'ms';
+      document.getElementById('prog-vu').textContent = fmt(p.vu);
+    });
     fetchJSON('/data/rps', function(d){
       if (d.values[0] != null) {
         rps.push(d.values[0]);
