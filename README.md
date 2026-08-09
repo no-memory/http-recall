@@ -145,6 +145,7 @@ Flags:
       --output-errors=OUTPUT-ERRORS
                                  Output errors to file
       --summary                  Only print the summary without realtime reports
+      --ui=terminal              Live UI renderer: terminal (ANSI) | tui (Bubble Tea)
       --unix-socket=UNIX-SOCKET  Unix domain socket path to use for connection
       --version                  Show application version.
 
@@ -174,6 +175,12 @@ Replay a spike window 10x faster:
 httprecall http://staging.internal --replay-file demo/replay-orders.json --speed 10 -c 500
 ```
 
+Render the live dashboard with the Bubble Tea TUI (market-terminal style):
+
+```bash
+httprecall http://staging.internal --replay-file demo/replay-orders.json --speed 5 -c 200 --ui tui
+```
+
 ## Project layout
 
 ```
@@ -181,6 +188,7 @@ cmd/httprecall/          CLI entry (benchmark + replay)
 cmd/splunk/               log → request-set converter (Splunk or offline logs)
 internal/httprecall/     engine: benchmark + replay schedulers, stats, terminal & web UI
 internal/splunk/          Splunk client + mapping-rules converter
+internal/tui/             Bubble Tea TUI dashboard (--ui tui)
 bench_server/            throwaway HTTP server for local testing
 demo/                    sample replay request sets
 preview/ tui/            design prototypes (Open Design HTML / Textual TUI)

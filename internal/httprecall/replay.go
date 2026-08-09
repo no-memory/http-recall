@@ -268,7 +268,6 @@ func runReplay(cfg *Config, clientOpt ClientOpt, errWriter io.Writer) error {
 		go charts.Serve(cfg.AutoOpenBrowser)
 	}
 
-	printer := NewPrinter(0, 0, !cfg.Clean, cfg.Summary)
-	printer.PrintLoop(report.Snapshot, cfg.Interval, cfg.Seconds, cfg.JSON, report.Done())
-	return nil
+	// terminal printer (or injected TUI)
+	return renderRun(cfg, report, desc)
 }

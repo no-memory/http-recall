@@ -53,6 +53,15 @@ type Config struct {
 	OutputErrors    string
 	Summary         bool
 	UnixSocket      string
+
+	// UI selects how the live run is rendered. nil = ANSI terminal printer.
+	UI UIRenderer
+}
+
+// UIRenderer renders a run's live statistics. Render must block until the
+// run finishes (report.Done() closes). Implemented by the tui package.
+type UIRenderer interface {
+	Render(report *StreamReport, desc string) error
 }
 
 // Run executes either the benchmark mode or the replay mode and blocks until
@@ -169,7 +178,16 @@ func Run(cfg *Config) error {
 		go charts.Serve(cfg.AutoOpenBrowser)
 	}
 
-	// terminal printer
+	// terminal printer (or injected TUI)
+	return renderRun(cfg, report, desc)
+}
+
+// renderRun blocks on either the injected UI renderer or the default ANSI
+// terminal printer, whichever the caller chose via Config.UI.
+func renderRun(cfg *Config, report *StreamReport, desc string) error {
+	if cfg.UI != nil {
+		return cfg.UI.Render(report, desc)
+	}
 	printer := NewPrinter(cfg.Requests, cfg.Duration, !cfg.Clean, cfg.Summary)
 	printer.PrintLoop(report.Snapshot, cfg.Interval, cfg.Seconds, cfg.JSON, report.Done())
 	return nil

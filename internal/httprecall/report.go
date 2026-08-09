@@ -282,6 +282,11 @@ func (s *StreamReport) Done() <-chan struct{} {
 	return s.doneChan
 }
 
+// Concurrency exposes the last observed in-flight concurrency to UI layers.
+func (rs *SnapshotReport) Concurrency() int {
+	return rs.concurrencyCount
+}
+
 type ChartsReport struct {
 	RPS         float64
 	Latency     Stats

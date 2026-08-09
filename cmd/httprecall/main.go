@@ -14,6 +14,7 @@ import (
 	"gopkg.in/alecthomas/kingpin.v3-unstable"
 
 	"httprecall/internal/httprecall"
+	"httprecall/internal/tui"
 )
 
 var (
@@ -58,6 +59,7 @@ var (
 	clean           = kingpin.Flag("clean", "Clean the histogram bar once its finished. Default is true").Default("true").NegatableBool()
 	outputErrors    = kingpin.Flag("output-errors", "Output errors to file").String()
 	summary         = kingpin.Flag("summary", "Only print the summary without realtime reports").Default("false").Bool()
+	ui              = kingpin.Flag("ui", "Live UI renderer: terminal (ANSI) | tui (Bubble Tea)").Default("terminal").Enum("terminal", "tui")
 	pprofAddr       = kingpin.Flag("pprof", "Enable pprof at special address").Hidden().String()
 	url             = kingpin.Arg("url", "Request url").Required().String()
 	unixSocket      = kingpin.Flag("unix-socket", "Unix domain socket path to use for connection").String()
@@ -211,8 +213,7 @@ func main() {
 
 	cfg := &httprecall.Config{
 		URL:             *url,
-		Concurrency:     *concurrency,
-		ReqRate:         reqRate.Limit(),
+		Concurrency:     *concurrency,		ReqRate:         reqRate.Limit(),
 		RampUp:          *rampUp,
 		Requests:        *requests,
 		Duration:        *duration,
@@ -246,6 +247,9 @@ func main() {
 		OutputErrors:    *outputErrors,
 		Summary:         *summary,
 		UnixSocket:      *unixSocket,
+	}
+	if *ui == "tui" {
+		cfg.UI = tui.Renderer{}
 	}
 
 	if err := httprecall.Run(cfg); err != nil {
