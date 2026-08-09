@@ -1,0 +1,49 @@
+{
+  "rules": [
+    {
+      "id": "R01-create-order",
+      "match": { "method": "POST", "path_regex": "^/api/orders/create$" },
+      "template": {
+        "method": "LOG",
+        "url": "/api/orders/create?trace_id=${trace_id}",
+        "headers": { "X-Client-IP": "${client_ip}", "X-Trace-Id": "${trace_id}" },
+        "body": "{\"order_id\":\"${order_id}\",\"amount\":${amount},\"channel\":\"api\"}"
+      },
+      "skip_missing": true
+    },
+    {
+      "id": "R02-get-order",
+      "match": { "method": "GET", "path_regex": "^/api/orders/[0-9]+$" },
+      "template": {
+        "method": "LOG",
+        "url": "/api/orders/${order_id}",
+        "headers": { "X-Trace-Id": "${trace_id}" }
+      },
+      "skip_missing": true
+    },
+    {
+      "id": "R03-payment",
+      "match": { "method": "POST", "path_regex": "^/v1/charge$" },
+      "template": {
+        "method": "LOG",
+        "url": "/v1/charge",
+        "headers": { "Content-Type": "application/json" },
+        "body": "${body}"
+      },
+      "skip_missing": true
+    },
+    {
+      "id": "R04-cart",
+      "match": { "method": "PUT", "path_regex": "^/api/cart" },
+      "template": {
+        "method": "LOG",
+        "url": "/api/cart/items/${item_id}",
+        "headers": { "X-Client-IP": "${client_ip}" }
+      },
+      "skip_missing": true
+    }
+  ],
+  "method_field": "method",
+  "path_field": "uri_path",
+  "time_field": "_time"
+}

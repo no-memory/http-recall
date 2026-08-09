@@ -51,13 +51,27 @@ GOPROXY=https://goproxy.cn,direct go build -o httprecall ./cmd/httprecall
 | 请求模板 | 单一 URL/method/body | 每请求独立 spec |
 | 统计/报告/UI | 共用 | 共用（同一 recordChan 管线） |
 
-## 从 Splunk 生成请求集
+## 从 Splunk 生成请求集（cmd/splunk）
 
-```spl
-index=api_gateway sourcetype=access_log
-| where status_code > 0 AND duration > 0
-| fields _time, method, uri_path, query, status_code, duration
-| sort _time asc
+按映射规则（对应设计稿 Request Mapping 页）把日志字段绑定为 `spec`，输出可直接回放的请求集：
+
+```bash
+# 构建
+GOPROXY=https://goproxy.cn,direct go build -o splunk ./cmd/splunk
+
+# 方式一：直接查询 Splunk
+splunk --url https://splunk.internal:8089 --token $SPLUNK_TOKEN \
+       --query 'index=api_gateway sourcetype=access_log | fields _time, method, uri_path, trace_id, client_ip, order_id | sort _time asc' \
+       --rules demo/rules.json --output requests.json
+
+# 方式二：转换离线日志导出（JSON 数组或 JSONL）
+splunk --logs-file demo/logs-sample.json --rules demo/rules.json --output requests.json
+
+# 然后回放
+httprecall http://staging.internal --replay-file requests.json --speed 5 -c 200
 ```
 
-导出后按映射规则（见设计稿 Request Mapping 页）把日志字段绑定为 `spec` 即可。
+**规则文件**（`demo/rules.json`）与 Request Mapping 页一致：每条规则 = 匹配条件
+（`match.method` / `match.path_regex`）+ 请求模板（`url` / `headers` / `body` 中的
+`${field}` 自动绑定日志字段）。`at` 由 `_time` 与最早一条日志的差值自动计算。
+未匹配规则的日志行会被跳过，缺失字段按 `skip_missing` 处理。

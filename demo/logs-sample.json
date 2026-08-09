@@ -1,0 +1,12 @@
+[
+  { "_time": "2026-08-09T14:02:11.482+08:00", "method": "POST", "uri_path": "/api/orders/create", "status_code": "201", "duration": "84", "client_ip": "10.4.2.19", "trace_id": "t-001", "order_id": "ORD-88421", "amount": "1299" },
+  { "_time": "2026-08-09T14:02:11.931+08:00", "method": "GET", "uri_path": "/api/orders/88421", "status_code": "200", "duration": "41", "client_ip": "10.4.7.2", "trace_id": "t-002", "order_id": "88421" },
+  { "_time": "2026-08-09T14:02:12.107+08:00", "method": "GET", "uri_path": "/api/orders/88421/items", "status_code": "200", "duration": "52", "client_ip": "10.4.2.19", "trace_id": "t-003", "order_id": "88421" },
+  { "_time": "2026-08-09T14:02:12.540+08:00", "method": "PUT", "uri_path": "/api/orders/88421/status", "status_code": "202", "duration": "118", "client_ip": "10.4.9.31", "trace_id": "t-004", "order_id": "88421" },
+  { "_time": "2026-08-09T14:02:13.023+08:00", "method": "GET", "uri_path": "/api/user/8812/cart", "status_code": "200", "duration": "36", "client_ip": "10.4.7.2", "trace_id": "t-005" },
+  { "_time": "2026-08-09T14:02:13.310+08:00", "method": "GET", "uri_path": "/api/orders/88421/pay", "status_code": "500", "duration": "1204", "client_ip": "10.4.2.19", "trace_id": "t-006", "order_id": "88421" },
+  { "_time": "2026-08-09T14:02:14.006+08:00", "method": "DELETE", "uri_path": "/api/cart/items/77", "status_code": "204", "duration": "29", "client_ip": "10.4.9.31", "trace_id": "t-007", "item_id": "77" },
+  { "_time": "2026-08-09T14:02:14.889+08:00", "method": "POST", "uri_path": "/api/orders/create", "status_code": "201", "duration": "96", "client_ip": "10.4.7.2", "trace_id": "t-008", "order_id": "ORD-88495", "amount": "520" },
+  { "_time": "2026-08-09T14:02:15.101+08:00", "method": "POST", "uri_path": "/v1/charge", "status_code": "200", "duration": "88", "client_ip": "10.4.7.2", "trace_id": "t-009", "body": "{\"charge_id\":\"c-9012\"}" },
+  { "_time": "2026-08-09T14:02:15.660+08:00", "method": "GET", "uri_path": "/api/orders/88495", "status_code": "200", "duration": "40", "client_ip": "10.4.7.2", "trace_id": "t-010", "order_id": "88495" }
+]

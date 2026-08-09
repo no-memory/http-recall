@@ -177,8 +177,10 @@ httprecall http://staging.internal --replay-file demo/replay-orders.json --speed
 ## Project layout
 
 ```
-cmd/httprecall/          CLI entry (kingpin flags → Config)
+cmd/httprecall/          CLI entry (benchmark + replay)
+cmd/splunk/               log → request-set converter (Splunk or offline logs)
 internal/httprecall/     engine: benchmark + replay schedulers, stats, terminal & web UI
+internal/splunk/          Splunk client + mapping-rules converter
 bench_server/            throwaway HTTP server for local testing
 demo/                    sample replay request sets
 preview/ tui/            design prototypes (Open Design HTML / Textual TUI)
