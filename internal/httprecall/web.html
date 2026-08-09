@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HTTP Recall — realtime</title>
+<style>
+:root{
+  --bg:#070b12; --surface:#0d1522; --line:#22304a; --grid:#16233a;
+  --fg:#e6edf3; --fg2:#9fb0c3; --dim:#5f7186;
+  --accent:#38bdf8; --buy:#22c55e; --sell:#ff4757; --warn:#f59e0b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--fg);
+  font:13px/1.5 "SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  padding:16px;min-height:100vh;
+}
+.ticker{
+  display:flex;gap:28px;align-items:center;flex-wrap:wrap;
+  border:1px solid var(--line);border-radius:6px;
+  background:var(--surface);padding:12px 18px;margin-bottom:14px;
+}
+.tk .k{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
+.tk .v{font-size:20px;font-weight:700;color:var(--accent)}
+.tk .v.up{color:var(--buy)} .tk .v.dn{color:var(--sell)} .tk .v.w{color:var(--warn)}
+.logo{font-size:14px;font-weight:700;color:#03111a;background:var(--accent);
+  padding:4px 10px;border-radius:4px;letter-spacing:.05em}
+.panel{border:1px solid var(--line);border-radius:6px;background:var(--surface);margin-bottom:14px;overflow:hidden}
+.panel-h{padding:8px 14px;border-bottom:1px solid var(--line);
+  font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}
+.panel-h b{color:var(--accent);font-weight:600;letter-spacing:0}
+canvas{display:block;width:100%;height:260px}
+.codes{display:flex;gap:10px;flex-wrap:wrap;padding:12px 14px}
+.code{flex:1;min-width:130px;border:1px solid var(--line);border-radius:4px;padding:10px}
+.code .h{font-size:11px;color:var(--fg2);display:flex;justify-content:space-between}
+.code .n{font-size:22px;font-weight:700;margin:4px 0 8px}
+.code .bar{height:6px;border-radius:3px;background:#101a2b;overflow:hidden}
+.code .bar i{display:block;height:100%;border-radius:3px}
+.c-2xx .n{color:var(--buy)} .c-3xx .n{color:var(--fg2)}
+.c-4xx .n{color:var(--warn)} .c-5xx .n{color:var(--sell)}
+.foot{color:var(--dim);font-size:11px;text-align:center;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="ticker">
+  <span class="logo">HTTP·RECALL</span>
+  <span class="tk"><div class="k">RPS</div><div class="v" id="t-rps">—</div></span>
+  <span class="tk"><div class="k">CONCURRENCY</div><div class="v" id="t-conc">—</div></span>
+  <span class="tk"><div class="k">LAT MEAN</div><div class="v w" id="t-lat">—</div></span>
+  <span class="tk"><div class="k">LAT P99</div><div class="v w" id="t-p99">—</div></span>
+  <span class="tk"><div class="k">2XX</div><div class="v up" id="t-2xx">—</div></span>
+  <span class="tk"><div class="k">5XX</div><div class="v dn" id="t-5xx">—</div></span>
+</div>
+
+<div class="panel">
+  <div class="panel-h">REQS/SEC <b id="ch-total">—</b> &nbsp;·&nbsp; <span id="ch-desc"></span></div>
+  <canvas id="chart"></canvas>
+</div>
+
+<div class="panel">
+  <div class="panel-h">RESPONSE STATUS CODES</div>
+  <div class="codes" id="codes"></div>
+</div>
+
+<div class="foot">http-recall · realtime web UI · auto-refresh 1s</div>
+
+<script>
+(function(){
+  var W = 900, H = 270;
+  var canvas = document.getElementById('chart');
+  canvas.width = W; canvas.height = H;
+  var ctx = canvas.getContext('2d');
+  var dpr = window.devicePixelRatio || 1;
+
+  var rps = [], lat = [], maxRps = 1;
+
+  function resize(){
+    var w = canvas.clientWidth || W;
+    canvas.width = w * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+  window.addEventListener('resize', resize);
+
+  function grid(maxV){
+    ctx.strokeStyle = '#16233a'; ctx.lineWidth = 1;
+    for (var g = 0; g <= 4; g++) {
+      var y = 16 + g / 4 * (H - 32);
+      ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(W - 8, y); ctx.stroke();
+      ctx.fillStyle = '#5f7186'; ctx.font = '10px monospace';
+      ctx.fillText(String(Math.round(maxV * (1 - g / 4))), 2, y - 3);
+    }
+  }
+
+  function series(data, color, fill){
+    var n = data.length;
+    if (n < 2) return;
+    var w = (W - 16) / 59;
+    var x0 = 8 + (59 - n) * w;
+    ctx.beginPath();
+    data.forEach(function(v, i){
+      var x = x0 + i * w, y = H - 16 - (v / maxRps) * (H - 40);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.stroke();
+    if (fill) {
+      ctx.lineTo(x0 + (n - 1) * w, H - 16); ctx.lineTo(x0, H - 16); ctx.closePath();
+      ctx.fillStyle = color; ctx.globalAlpha = 0.08; ctx.fill(); ctx.globalAlpha = 1;
+    }
+  }
+
+  function draw(){
+    ctx.clearRect(0, 0, W, H);
+    grid(maxRps);
+    series(lat, '#f59e0b', false);
+    series(rps, '#38bdf8', true);
+  }
+
+  function fmt(n){ return n.toLocaleString('en-US'); }
+
+  function fetchJSON(path, cb){
+    fetch(path).then(function(r){ return r.json(); }).then(cb).catch(function(){});
+  }
+
+  function tick(){
+    fetchJSON('/data/rps', function(d){
+      if (d.values[0] != null) {
+        rps.push(d.values[0]);
+        if (rps.length > 60) rps.shift();
+        maxRps = Math.max.apply(null, rps) * 1.15;
+        document.getElementById('t-rps').textContent = fmt(Math.round(d.values[0]));
+        draw();
+      }
+    });
+    fetchJSON('/data/latency', function(d){
+      if (d.values[0] != null) {
+        var mean = d.values[1], max = d.values[2];
+        lat.push(max || mean);
+        if (lat.length > 60) lat.shift();
+        document.getElementById('t-lat').textContent = Math.round(mean) + 'ms';
+        document.getElementById('t-p99').textContent = Math.round(max) + 'ms';
+        document.getElementById('t-lat').className = 'v w';
+      }
+    });
+    fetchJSON('/data/code', function(d){
+      if (d.values[0] == null) return;
+      var m = d.values[0];
+      var t2 = m['200']||0, t3 = (m['300']||0)+(m['301']||0)+(m['302']||0)+(m['304']||0),
+          t4 = (m['400']||0)+(m['404']||0)+(m['429']||0),
+          t5 = (m['500']||0)+(m['502']||0)+(m['503']||0);
+      document.getElementById('t-2xx').textContent = fmt(t2);
+      document.getElementById('t-5xx').textContent = fmt(t5);
+      document.getElementById('ch-total').textContent = fmt(t2+t3+t4+t5) + ' req';
+      var total = t2+t3+t4+t5 || 1;
+      renderCodes([
+        {c:'2xx', n:t2, color:'#22c55e', pct:t2/total*100},
+        {c:'3xx', n:t3, color:'#5f7186', pct:t3/total*100},
+        {c:'4xx', n:t4, color:'#f59e0b', pct:t4/total*100},
+        {c:'5xx', n:t5, color:'#ff4757', pct:t5/total*100}
+      ]);
+    });
+    fetchJSON('/data/concurrency', function(d){
+      if (d.values[0] != null)
+        document.getElementById('t-conc').textContent = fmt(d.values[0]);
+    });
+  }
+
+  function renderCodes(items){
+    var el = document.getElementById('codes');
+    el.innerHTML = items.map(function(it){
+      return '<div class="code c-' + it.c + '">' +
+        '<div class="h"><span>' + it.c + '</span><span>' + fmt(it.n) + '</span></div>' +
+        '<div class="n">' + it.pct.toFixed(1) + '%</div>' +
+        '<div class="bar"><i style="width:' + it.pct.toFixed(1) + '%;background:' + it.color + '"></i></div>' +
+        '</div>';
+    }).join('');
+  }
+
+  var desc = document.getElementById('ch-desc');
+  desc.textContent = document.title.replace(' — realtime', '');
+  resize();
+  setInterval(tick, 1000);
+  tick();
+})();
+</script>
+</body>
+</html>

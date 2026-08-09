@@ -181,6 +181,13 @@ Render the live dashboard with the Bubble Tea TUI (market-terminal style):
 httprecall http://staging.internal --replay-file demo/replay-orders.json --speed 5 -c 200 --ui tui
 ```
 
+Open the realtime web UI (self-contained page, no external deps):
+
+```bash
+httprecall http://staging.internal --replay-file demo/replay-orders.json --speed 5 -c 200 --listen :18888
+# → http://localhost:18888
+```
+
 ## Project layout
 
 ```

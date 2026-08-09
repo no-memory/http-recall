@@ -3,6 +3,7 @@ package httprecall
 import (
 	"encoding/json"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -166,7 +167,7 @@ func TestChartsHandlerDataEndpointsWithNoData(t *testing.T) {
 	}
 }
 
-func TestChartsHandlerServesPageAssetsAndNotFound(t *testing.T) {
+func TestChartsHandlerServesPageAndNotFound(t *testing.T) {
 	charts := newTestCharts(t, func() *ChartsReport { return nil })
 
 	page := handleChartRequest(charts, "/")
@@ -176,10 +177,11 @@ func TestChartsHandlerServesPageAssetsAndNotFound(t *testing.T) {
 	if got := string(page.Header.ContentType()); got != "text/html" {
 		t.Fatalf("GET / content-type = %q, want text/html", got)
 	}
-
-	asset := handleChartRequest(charts, assetsPath+"jquery.min.js")
-	if asset.StatusCode() != fasthttp.StatusOK || len(asset.Body()) == 0 {
-		t.Fatalf("asset status=%d body len=%d, want 200 with body", asset.StatusCode(), len(asset.Body()))
+	// the page must be self-contained: inline canvas JS, no external deps
+	for _, want := range []string{"HTTP·RECALL", "canvas", "/data/rps", "fetchJSON"} {
+		if !strings.Contains(string(page.Body()), want) {
+			t.Fatalf("GET / missing %q in body", want)
+		}
 	}
 
 	missing := handleChartRequest(charts, "/missing")
