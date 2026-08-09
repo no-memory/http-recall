@@ -49,19 +49,24 @@ type Model struct {
 	Snapshot func() *httprecall.SnapshotReport
 	Recent   func() []httprecall.RecentRequest
 	RPSHist  func() []float64
+	Progress func() httprecall.ReplayProgress
 	Done     <-chan struct{}
 
+	meta   httprecall.RunMeta
 	width  int
 	height int
+	view   int // 0=meter 1=tape 2=errors
 	last   *httprecall.SnapshotReport
 	// tape keeps the last shown request outcomes (newest first).
 	tape []httprecall.RecentRequest
 	// hist keeps the last shown per-second RPS samples.
 	hist []float64
+	// prog keeps the latest replay progress (replay mode only).
+	prog *httprecall.ReplayProgress
 }
 
-func New(snapFn func() *httprecall.SnapshotReport, recentFn func() []httprecall.RecentRequest, rpsFn func() []float64, done <-chan struct{}) Model {
-	return Model{Snapshot: snapFn, Recent: recentFn, RPSHist: rpsFn, Done: done}
+func New(snapFn func() *httprecall.SnapshotReport, recentFn func() []httprecall.RecentRequest, rpsFn func() []float64, progFn func() httprecall.ReplayProgress, meta httprecall.RunMeta, done <-chan struct{}) Model {
+	return Model{Snapshot: snapFn, Recent: recentFn, RPSHist: rpsFn, Progress: progFn, meta: meta, Done: done}
 }
 
 // ── messages ──────────────────────────────────────────────────────────────
@@ -98,6 +103,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "tab", "right":
+			m.view = (m.view + 1) % 3
+		case "left":
+			m.view = (m.view + 2) % 3
+		case "1", "2", "3":
+			m.view = int(msg.String()[0] - '1')
 		}
 	case tickMsg:
 		m.last = m.Snapshot()
@@ -112,6 +123,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.RPSHist != nil {
 			m.hist = m.RPSHist()
 		}
+		if m.Progress != nil {
+			p := m.Progress()
+			m.prog = &p
+		}
 		return m, tick()
 	case doneMsg:
 		return m, tea.Quit
@@ -122,17 +137,57 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // ── view ──────────────────────────────────────────────────────────────────
 
 func (m Model) View() tea.View {
+	var b strings.Builder
+	b.WriteString(m.header())
+
+	switch m.view {
+	case 1:
+		b.WriteString(panel("REQUEST TAPE — ALL", m.tapeView()))
+	case 2:
+		b.WriteString(panel("ERRORS", m.errorsView()))
+	default:
+		b.WriteString(m.marketView())
+	}
+
+	b.WriteString("\n" + dim.Render("tab / ← → switch · 1 2 3 jump · q quit"))
+	return tea.NewView(b.String())
+}
+
+// header renders the app + mode bar.
+func (m Model) header() string {
+	var b strings.Builder
+	b.WriteString(accent.Render(" HTTP·RECALL "))
+	mode := "BENCHMARK"
+	if m.meta.Mode == "replay" {
+		mode = "REPLAY"
+	}
+	b.WriteString(amber.Render(" " + mode + " "))
+
+	views := []string{"MARKET", "TAPE", "ERRORS"}
+	for i, name := range views {
+		if i == m.view {
+			b.WriteString(cyan.Render(" [" + name + "]"))
+		} else {
+			b.WriteString(dim.Render(" " + name))
+		}
+	}
+	b.WriteString("\n\n")
+	return b.String()
+}
+
+// marketView is the primary dashboard.
+func (m Model) marketView() string {
+	var b strings.Builder
 	rs := m.last
 	if rs == nil {
 		rs = &httprecall.SnapshotReport{}
 	}
 
-	var b strings.Builder
-
-	// header
-	b.WriteString(accent.Render(" HTTP·RECALL "))
-	b.WriteString(dim.Render("  log replay · load test   "))
-	b.WriteString("\n\n")
+	// replay progress panel (replay mode only)
+	if m.prog != nil {
+		b.WriteString(panel("REPLAY PROGRESS", progressView(m.prog)))
+		b.WriteString("\n\n")
+	}
 
 	// KPI row
 	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
@@ -155,15 +210,77 @@ func (m Model) View() tea.View {
 	// QPS sparkline
 	b.WriteString(panel("QPS — LAST 60s", sparkline(m.hist)))
 	b.WriteString("\n\n")
+	return b.String()
+}
 
-	// request tape
-	b.WriteString(panel("REQUEST TAPE", tape(m.tape)))
-	b.WriteString("\n\n")
+// tapeView renders the full request stream (up to 30 rows).
+func (m Model) tapeView() string {
+	return tape(m.tape, 30)
+}
 
-	// footer
-	b.WriteString(dim.Render("q / ctrl+c quit"))
+// errorsView renders error counts and the most recent failed requests.
+func (m Model) errorsView() string {
+	var b strings.Builder
+	rs := m.last
+	if rs == nil {
+		rs = &httprecall.SnapshotReport{}
+	}
+	if len(rs.Errors) == 0 {
+		b.WriteString(dim.Render("no errors recorded"))
+		b.WriteString("\n")
+	}
+	// error message → count, sorted by count desc
+	type ec struct {
+		msg string
+		n   int64
+	}
+	errs := make([]ec, 0, len(rs.Errors))
+	for msg, n := range rs.Errors {
+		errs = append(errs, ec{msg, n})
+	}
+	for i := 0; i < len(errs); i++ {
+		for j := i + 1; j < len(errs); j++ {
+			if errs[j].n > errs[i].n {
+				errs[i], errs[j] = errs[j], errs[i]
+			}
+		}
+	}
+	for _, e := range errs {
+		b.WriteString(fmt.Sprintf("%s  %s\n", coral.Render(fmt.Sprintf("%5d", e.n)), dim.Render(e.msg)))
+	}
 
-	return tea.NewView(b.String())
+	// failed requests from the tape
+	var failed []httprecall.RecentRequest
+	for _, r := range m.tape {
+		if r.Error != "" || r.Code >= 400 {
+			failed = append(failed, r)
+		}
+	}
+	if len(failed) > 0 {
+		b.WriteString("\n" + cyan.Render("RECENT FAILURES") + "\n")
+		b.WriteString(tape(failed, 10))
+	}
+	return b.String()
+}
+
+// progressView renders the replay run progress bar and counters.
+func progressView(p *httprecall.ReplayProgress) string {
+	pct := 0.0
+	if p.Total > 0 {
+		pct = float64(p.Sent) / float64(p.Total)
+	}
+	barLen := 30
+	filled := int(pct * float64(barLen))
+	bar := strings.Repeat("█", filled) + strings.Repeat("░", barLen-filled)
+	if filled > barLen {
+		filled = barLen
+	}
+	bar = cyan.Render(strings.Repeat("█", filled)) + dim.Render(strings.Repeat("░", barLen-filled))
+	pctStr := fmt.Sprintf("%5.1f%%", pct*100)
+	sim := p.SimTime.Round(time.Millisecond).String()
+	return fmt.Sprintf("%s  %s  \nSENT %s / %s   SPEED %g×   SIM %s   VU %d",
+		bar, pctStr,
+		formatInt(p.Sent), formatInt(p.Total), p.Speed, sim, p.VU)
 }
 
 // sparkline renders a single-line density bar chart of the RPS history.
@@ -192,14 +309,14 @@ func sparkline(data []float64) string {
 	return b.String()
 }
 
-// tape renders the most recent request outcomes as a market-style ticker.
-func tape(rows []httprecall.RecentRequest) string {
+// tape renders request outcomes as a market-style ticker, newest first.
+func tape(rows []httprecall.RecentRequest, max int) string {
 	if len(rows) == 0 {
 		return dim.Render("waiting for traffic…")
 	}
 	show := rows
-	if len(show) > 12 {
-		show = show[:12]
+	if len(show) > max {
+		show = show[:max]
 	}
 	lines := make([]string, 0, len(show))
 	for _, r := range show {
@@ -317,14 +434,15 @@ func statusCodes(rs *httprecall.SnapshotReport) string {
 // Renderer implements httprecall.UIRenderer with the Bubble Tea dashboard.
 type Renderer struct{}
 
-func (Renderer) Render(report *httprecall.StreamReport, desc string) error {
-	return RunProgram(report)
+func (Renderer) Render(report *httprecall.StreamReport, meta httprecall.RunMeta) error {
+	return RunProgram(report, meta)
 }
 
 // RunProgram boots a full-screen Bubble Tea app for the given report feed
 // and blocks until the run completes (done closes) or the user quits.
-func RunProgram(report *httprecall.StreamReport) error {
-	p := tea.NewProgram(New(report.Snapshot, report.RecentRequests, report.RPSHistory, report.Done()))
+func RunProgram(report *httprecall.StreamReport, meta httprecall.RunMeta) error {
+	m := New(report.Snapshot, report.RecentRequests, report.RPSHistory, meta.Progress, meta, report.Done())
+	p := tea.NewProgram(m)
 	_, err := p.Run()
 	return err
 }

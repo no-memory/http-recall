@@ -94,6 +94,30 @@ type ReplayRequester struct {
 	failed     int64
 	readBytes  int64
 	writeBytes int64
+
+	// live progress counters for UI layers.
+	sent    int64
+	simTime int64 // nanoseconds of simulated log offset reached
+}
+
+// ReplayProgress is a point-in-time snapshot of a replay run, for the TUI.
+type ReplayProgress struct {
+	Sent    int64
+	Total   int64
+	Speed   float64
+	SimTime time.Duration // simulated log offset reached
+	VU      int
+}
+
+// Progress returns a consistent snapshot of the run so far.
+func (r *ReplayRequester) Progress() ReplayProgress {
+	return ReplayProgress{
+		Sent:    atomic.LoadInt64(&r.sent),
+		Total:   int64(len(r.items)),
+		Speed:   r.opts.Speed,
+		SimTime: time.Duration(atomic.LoadInt64(&r.simTime)),
+		VU:      r.opts.VU,
+	}
 }
 
 func NewReplayRequester(items []ReplayItem, opts ReplayOptions, errWriter io.Writer, clientOpt *ClientOpt) (*ReplayRequester, error) {
@@ -209,6 +233,10 @@ func (r *ReplayRequester) execute(it ReplayItem) {
 	rr.url = spec.URL
 	r.recordChan <- rr // pool is returned by StreamReport.Collect
 
+	// advance the live progress counters
+	atomic.StoreInt64(&r.simTime, int64(time.Duration(it.At)))
+	atomic.AddInt64(&r.sent, 1)
+
 	if rr.error != "" {
 		n := atomic.AddInt64(&r.failed, 1)
 		switch r.opts.FailPolicy {
@@ -271,5 +299,5 @@ func runReplay(cfg *Config, clientOpt ClientOpt, errWriter io.Writer) error {
 	}
 
 	// terminal printer (or injected TUI)
-	return renderRun(cfg, report, desc)
+	return renderRun(cfg, report, RunMeta{Mode: "replay", Desc: desc, Progress: rq.Progress})
 }

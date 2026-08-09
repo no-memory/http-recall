@@ -58,10 +58,20 @@ type Config struct {
 	UI UIRenderer
 }
 
+// RunMeta describes the active run to a UIRenderer.
+type RunMeta struct {
+	// Mode is "benchmark" or "replay".
+	Mode string
+	// Desc is the human-readable run description shown at startup.
+	Desc string
+	// Progress returns replay progress; nil in benchmark mode.
+	Progress func() ReplayProgress
+}
+
 // UIRenderer renders a run's live statistics. Render must block until the
 // run finishes (report.Done() closes). Implemented by the tui package.
 type UIRenderer interface {
-	Render(report *StreamReport, desc string) error
+	Render(report *StreamReport, meta RunMeta) error
 }
 
 // Run executes either the benchmark mode or the replay mode and blocks until
@@ -179,14 +189,14 @@ func Run(cfg *Config) error {
 	}
 
 	// terminal printer (or injected TUI)
-	return renderRun(cfg, report, desc)
+	return renderRun(cfg, report, RunMeta{Mode: "benchmark", Desc: desc})
 }
 
 // renderRun blocks on either the injected UI renderer or the default ANSI
 // terminal printer, whichever the caller chose via Config.UI.
-func renderRun(cfg *Config, report *StreamReport, desc string) error {
+func renderRun(cfg *Config, report *StreamReport, meta RunMeta) error {
 	if cfg.UI != nil {
-		return cfg.UI.Render(report, desc)
+		return cfg.UI.Render(report, meta)
 	}
 	printer := NewPrinter(cfg.Requests, cfg.Duration, !cfg.Clean, cfg.Summary)
 	printer.PrintLoop(report.Snapshot, cfg.Interval, cfg.Seconds, cfg.JSON, report.Done())
