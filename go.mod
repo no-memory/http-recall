@@ -1,8 +1,8 @@
 module httprecall
 
-go 1.25
+go 1.26
 
-toolchain go1.25.0
+toolchain go1.26.3
 
 require (
 	github.com/AdhityaRamadhanus/fasthttpcors v0.0.0-20170121111917-d4c07198763a
