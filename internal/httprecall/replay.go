@@ -1,4 +1,4 @@
-package main
+package httprecall
 
 import (
 	"context"
@@ -222,33 +222,30 @@ func (r *ReplayRequester) execute(it ReplayItem) {
 
 // runReplay wires the replay scheduler into the same report / printer /
 // charts pipeline used by the benchmark mode.
-func runReplay(clientOpt ClientOpt, errWriter io.Writer) {
-	data, err := os.ReadFile(*replayFile)
+func runReplay(cfg *Config, clientOpt ClientOpt, errWriter io.Writer) error {
+	data, err := os.ReadFile(cfg.ReplayFile)
 	if err != nil {
-		errAndExit(err.Error())
-		return
+		return err
 	}
 	var set ReplaySet
 	if err := json.Unmarshal(data, &set); err != nil {
-		errAndExit("invalid replay set: " + err.Error())
-		return
+		return fmt.Errorf("invalid replay set: %w", err)
 	}
 
 	opts := ReplayOptions{
-		Speed:      *speed,
-		VU:         *concurrency,
-		StartAt:    *replayFrom,
-		EndAt:      *replayTo,
-		FailPolicy: *failPolicy,
+		Speed:      cfg.Speed,
+		VU:         cfg.Concurrency,
+		StartAt:    cfg.ReplayFrom,
+		EndAt:      cfg.ReplayTo,
+		FailPolicy: cfg.FailPolicy,
 	}
 	rq, err := NewReplayRequester(set.Items, opts, errWriter, &clientOpt)
 	if err != nil {
-		errAndExit(err.Error())
-		return
+		return err
 	}
 
 	desc := fmt.Sprintf("Replaying %d request(s) at %.1fx speed with %d VU → %s",
-		len(set.Items), *speed, *concurrency, clientOpt.url)
+		len(set.Items), cfg.Speed, cfg.Concurrency, clientOpt.url)
 	fmt.Fprintln(os.Stderr, desc)
 
 	go rq.Run()
@@ -256,23 +253,22 @@ func runReplay(clientOpt ClientOpt, errWriter io.Writer) {
 	go report.Collect(rq.RecordChan())
 
 	var ln net.Listener
-	if *chartsListenAddr != "" {
-		ln, err = net.Listen("tcp", *chartsListenAddr)
+	if cfg.Listen != "" {
+		ln, err = net.Listen("tcp", cfg.Listen)
 		if err != nil {
-			errAndExit(err.Error())
-			return
+			return err
 		}
 		fmt.Fprintf(os.Stderr, "@ Real-time charts is listening on http://%s\n", ln.Addr().String())
 	}
 	if ln != nil {
 		charts, err := NewCharts(ln, report.Charts, desc)
 		if err != nil {
-			errAndExit(err.Error())
-			return
+			return err
 		}
-		go charts.Serve(*autoOpenBrowser)
+		go charts.Serve(cfg.AutoOpenBrowser)
 	}
 
-	printer := NewPrinter(0, 0, !*clean, *summary)
-	printer.PrintLoop(report.Snapshot, *interval, *seconds, *jsonFormat, report.Done())
+	printer := NewPrinter(0, 0, !cfg.Clean, cfg.Summary)
+	printer.PrintLoop(report.Snapshot, cfg.Interval, cfg.Seconds, cfg.JSON, report.Done())
+	return nil
 }

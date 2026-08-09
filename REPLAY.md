@@ -7,7 +7,7 @@
 
 ```bash
 # 构建
-GOPROXY=https://goproxy.cn,direct go build -o plow .
+GOPROXY=https://goproxy.cn,direct go build -o plow ./cmd/httprecall
 
 # 回放请求集（默认 1x 倍速）
 ./plow http://target.internal --replay-file demo/replay-orders.json

@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -14,6 +12,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"gopkg.in/alecthomas/kingpin.v3-unstable"
+
+	"httprecall/internal/httprecall"
 )
 
 var (
@@ -52,7 +52,7 @@ var (
 	reqWriteTimeout  = kingpin.Flag("req-timeout", "Timeout for full request writing").PlaceHolder("DURATION").Duration()
 	respReadTimeout  = kingpin.Flag("resp-timeout", "Timeout for full response reading").PlaceHolder("DURATION").Duration()
 	socks5           = kingpin.Flag("socks5", "Socks5 proxy").PlaceHolder("ip:port").String()
-	httpProxy        = kingpin.Flag("http-proxy","Set HTTP proxy").PlaceHolder("username:password@ip:port").String()
+	httpProxy        = kingpin.Flag("http-proxy", "Set HTTP proxy").PlaceHolder("username:password@ip:port").String()
 
 	autoOpenBrowser = kingpin.Flag("auto-open-browser", "Specify whether auto open browser to show web charts").Bool()
 	clean           = kingpin.Flag("clean", "Clean the histogram bar once its finished. Default is true").Default("true").NegatableBool()
@@ -102,6 +102,7 @@ Examples:
 
   plow http://127.0.0.1:8080/ -c 20 -n 100000
   plow https://httpbin.org/post -c 20 -d 5m --body @file.json -T 'application/json' -m POST
+  plow http://127.0.0.1:8080 --replay-file demo/replay-orders.json --speed 5 -c 200
 
 {{if .Context.Flags -}}
 {{T "Flags:"}}
@@ -208,125 +209,46 @@ func main() {
 		go http.ListenAndServe(*pprofAddr, nil)
 	}
 
-	var err error
-	var bodyBytes []byte
-	var bodyFile string
-
-	if *body != "" {
-		if strings.HasPrefix(*body, "@") {
-			fileName := (*body)[1:]
-			if _, err = os.Stat(fileName); err != nil {
-				errAndExit(err.Error())
-				return
-			}
-			if *stream {
-				bodyFile = fileName
-			} else {
-				bodyBytes, err = os.ReadFile(fileName)
-				if err != nil {
-					errAndExit(err.Error())
-					return
-				}
-			}
-		} else {
-			bodyBytes = []byte(*body)
-		}
-
-		if !methodSet {
-			*method = "POST"
-		}
+	cfg := &httprecall.Config{
+		URL:             *url,
+		Concurrency:     *concurrency,
+		ReqRate:         reqRate.Limit(),
+		RampUp:          *rampUp,
+		Requests:        *requests,
+		Duration:        *duration,
+		Interval:        *interval,
+		Seconds:         *seconds,
+		JSON:            *jsonFormat,
+		ReplayFile:      *replayFile,
+		Speed:           *speed,
+		FailPolicy:      *failPolicy,
+		ReplayFrom:      *replayFrom,
+		ReplayTo:        *replayTo,
+		Method:          *method,
+		MethodSet:       methodSet,
+		Headers:         *headers,
+		Host:            *host,
+		ContentType:     *contentType,
+		Body:            *body,
+		Stream:          *stream,
+		Cert:            *cert,
+		Key:             *key,
+		Insecure:        *insecure,
+		Listen:          *chartsListenAddr,
+		Timeout:         *timeout,
+		DialTimeout:     *dialTimeout,
+		ReqWriteTimeout: *reqWriteTimeout,
+		RespReadTimeout: *respReadTimeout,
+		Socks5:          *socks5,
+		HTTPProxy:       *httpProxy,
+		AutoOpenBrowser: *autoOpenBrowser,
+		Clean:           *clean,
+		OutputErrors:    *outputErrors,
+		Summary:         *summary,
+		UnixSocket:      *unixSocket,
 	}
 
-	errWriter := io.Discard
-	if *outputErrors != "" {
-		errWriter, err = os.Create(*outputErrors)
-		if err != nil {
-			errAndExit(err.Error())
-			return
-		}
-	}
-
-	clientOpt := ClientOpt{
-		url:       *url,
-		method:    *method,
-		headers:   *headers,
-		bodyBytes: bodyBytes,
-		bodyFile:  bodyFile,
-
-		certPath: *cert,
-		keyPath:  *key,
-		insecure: *insecure,
-
-		maxConns:     *concurrency,
-		doTimeout:    *timeout,
-		readTimeout:  *respReadTimeout,
-		writeTimeout: *reqWriteTimeout,
-		dialTimeout:  *dialTimeout,
-
-		socks5Proxy: *socks5,
-		httpProxy:   *httpProxy,
-		contentType: *contentType,
-		host:        *host,
-		unixSocket:  *unixSocket,
-	}
-
-	// Replay mode: replay a timestamped request set instead of benchmarking.
-	if *replayFile != "" {
-		runReplay(clientOpt, errWriter)
-		return
-	}
-
-	requester, err := NewRequester(*concurrency, *requests, *duration, reqRate.Limit(), errWriter, &clientOpt, *rampUp)
-	if err != nil {
+	if err := httprecall.Run(cfg); err != nil {
 		errAndExit(err.Error())
-		return
 	}
-
-	// description
-	var desc string
-	desc = fmt.Sprintf("Benchmarking %s", *url)
-	if *requests > 0 {
-		desc += fmt.Sprintf(" with %d request(s)", *requests)
-	}
-	if *duration > 0 {
-		desc += fmt.Sprintf(" for %s", duration.String())
-	}
-	if *rampUp > 0 {
-		desc += fmt.Sprintf(" with ramp up %d pre second", *rampUp)
-	}
-	desc += fmt.Sprintf(" using %d connection(s).", *concurrency)
-	fmt.Fprintln(os.Stderr, desc)
-
-	// charts listener
-	var ln net.Listener
-	if *chartsListenAddr != "" {
-		ln, err = net.Listen("tcp", *chartsListenAddr)
-		if err != nil {
-			errAndExit(err.Error())
-			return
-		}
-		fmt.Fprintf(os.Stderr, "@ Real-time charts is listening on http://%s\n", ln.Addr().String())
-	}
-	fmt.Fprintln(os.Stderr, "")
-
-	// do request
-	go requester.Run()
-
-	// metrics collection
-	report := NewStreamReport()
-	go report.Collect(requester.RecordChan())
-
-	if ln != nil {
-		// serve charts data
-		charts, err := NewCharts(ln, report.Charts, desc)
-		if err != nil {
-			errAndExit(err.Error())
-			return
-		}
-		go charts.Serve(*autoOpenBrowser)
-	}
-
-	// terminal printer
-	printer := NewPrinter(*requests, *duration, !*clean, *summary)
-	printer.PrintLoop(report.Snapshot, *interval, *seconds, *jsonFormat, report.Done())
 }

@@ -1,4 +1,4 @@
-module github.com/six-ddc/plow
+module httprecall
 
 go 1.24.0
 
