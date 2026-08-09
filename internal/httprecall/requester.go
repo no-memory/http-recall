@@ -35,6 +35,8 @@ type ReportRecord struct {
 	readBytes        int64
 	writeBytes       int64
 	concurrencyCount int
+	method           string
+	url              string
 }
 
 var recordPool = sync.Pool{
@@ -406,6 +408,8 @@ func (r *Requester) Run() {
 					rr.readBytes = atomic.LoadInt64(&r.readBytes)
 					rr.writeBytes = atomic.LoadInt64(&r.writeBytes)
 					rr.concurrencyCount = concurrencyCount
+					rr.method = string(req.Header.Method())
+					rr.url = string(req.URI().RequestURI())
 					r.recordChan <- rr
 				}
 			}()

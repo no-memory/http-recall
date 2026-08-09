@@ -30,11 +30,11 @@ func fakeSnapshot() *httprecall.SnapshotReport {
 }
 
 func TestModelViewRendersDashboard(t *testing.T) {
-	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, nil)
+	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, nil, nil, nil)
 	m.last = m.Snapshot()
 
 	v := m.View().Content
-	for _, want := range []string{"HTTP·RECALL", "ELAPSED", "3s", "18,420", "2,340.5", "99.84%", "P99", "298ms", "2xx"} {
+	for _, want := range []string{"HTTP·RECALL", "ELAPSED", "3s", "18,420", "2,340.5", "99.84%", "P99", "298ms", "2xx", "QPS", "REQUEST TAPE", "waiting for traffic"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q\n---\n%s", want, v)
 		}
@@ -42,7 +42,7 @@ func TestModelViewRendersDashboard(t *testing.T) {
 }
 
 func TestModelQuitsOnQ(t *testing.T) {
-	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, nil)
+	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, nil, nil, nil)
 	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if cmd == nil {
 		t.Fatal("expected quit command on 'q'")
@@ -51,7 +51,7 @@ func TestModelQuitsOnQ(t *testing.T) {
 
 func TestModelQuitsOnDone(t *testing.T) {
 	done := make(chan struct{})
-	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, done)
+	m := New(func() *httprecall.SnapshotReport { return fakeSnapshot() }, nil, nil, done)
 	close(done)
 
 	var got tea.Msg
@@ -74,7 +74,7 @@ func TestModelTickUpdatesSnapshot(t *testing.T) {
 	m := New(func() *httprecall.SnapshotReport {
 		calls++
 		return fakeSnapshot()
-	}, nil)
+	}, nil, nil, nil)
 
 	updated, _ := m.Update(tickMsg(time.Now()))
 	mm, ok := updated.(Model)

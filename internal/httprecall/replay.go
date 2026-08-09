@@ -205,6 +205,8 @@ func (r *ReplayRequester) execute(it ReplayItem) {
 	r.base.DoRequest(req, resp, rr)
 	rr.readBytes = atomic.LoadInt64(&r.readBytes)
 	rr.writeBytes = atomic.LoadInt64(&r.writeBytes)
+	rr.method = method
+	rr.url = spec.URL
 	r.recordChan <- rr // pool is returned by StreamReport.Collect
 
 	if rr.error != "" {

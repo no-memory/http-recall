@@ -47,15 +47,21 @@ func panel(title, body string) string {
 // Model is the Bubble Tea state for the dashboard.
 type Model struct {
 	Snapshot func() *httprecall.SnapshotReport
+	Recent   func() []httprecall.RecentRequest
+	RPSHist  func() []float64
 	Done     <-chan struct{}
 
 	width  int
 	height int
 	last   *httprecall.SnapshotReport
+	// tape keeps the last shown request outcomes (newest first).
+	tape []httprecall.RecentRequest
+	// hist keeps the last shown per-second RPS samples.
+	hist []float64
 }
 
-func New(snapFn func() *httprecall.SnapshotReport, done <-chan struct{}) Model {
-	return Model{Snapshot: snapFn, Done: done}
+func New(snapFn func() *httprecall.SnapshotReport, recentFn func() []httprecall.RecentRequest, rpsFn func() []float64, done <-chan struct{}) Model {
+	return Model{Snapshot: snapFn, Recent: recentFn, RPSHist: rpsFn, Done: done}
 }
 
 // ── messages ──────────────────────────────────────────────────────────────
@@ -95,6 +101,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tickMsg:
 		m.last = m.Snapshot()
+		if m.Recent != nil {
+			rr := m.Recent()
+			// newest first for the tape
+			for i, j := 0, len(rr)-1; i < j; i, j = i+1, j-1 {
+				rr[i], rr[j] = rr[j], rr[i]
+			}
+			m.tape = rr
+		}
+		if m.RPSHist != nil {
+			m.hist = m.RPSHist()
+		}
 		return m, tick()
 	case doneMsg:
 		return m, tea.Quit
@@ -135,10 +152,92 @@ func (m Model) View() tea.View {
 	b.WriteString(panel("STATUS CODES", statusCodes(rs)))
 	b.WriteString("\n\n")
 
+	// QPS sparkline
+	b.WriteString(panel("QPS — LAST 60s", sparkline(m.hist)))
+	b.WriteString("\n\n")
+
+	// request tape
+	b.WriteString(panel("REQUEST TAPE", tape(m.tape)))
+	b.WriteString("\n\n")
+
 	// footer
 	b.WriteString(dim.Render("q / ctrl+c quit"))
 
 	return tea.NewView(b.String())
+}
+
+// sparkline renders a single-line density bar chart of the RPS history.
+func sparkline(data []float64) string {
+	const density = "▁▂▃▄▅▆▇█"
+	if len(data) == 0 {
+		return dim.Render("collecting…")
+	}
+	max := 0.0
+	for _, v := range data {
+		if v > max {
+			max = v
+		}
+	}
+	if max <= 0 {
+		return dim.Render(strings.Repeat("▁", len(data)))
+	}
+	var b strings.Builder
+	for _, v := range data {
+		idx := int(v / max * 7.99)
+		if idx > 7 {
+			idx = 7
+		}
+		b.WriteString(cyan.Render(string(density[idx])))
+	}
+	return b.String()
+}
+
+// tape renders the most recent request outcomes as a market-style ticker.
+func tape(rows []httprecall.RecentRequest) string {
+	if len(rows) == 0 {
+		return dim.Render("waiting for traffic…")
+	}
+	show := rows
+	if len(show) > 12 {
+		show = show[:12]
+	}
+	lines := make([]string, 0, len(show))
+	for _, r := range show {
+		codeStyle := dim
+		switch {
+		case r.Code >= 200 && r.Code < 300:
+			codeStyle = green
+		case r.Code >= 400 && r.Code < 500:
+			codeStyle = amber
+		case r.Code >= 500:
+			codeStyle = coral
+		case r.Error != "":
+			codeStyle = coral
+		}
+		method := r.Method
+		if method == "" {
+			method = "GET"
+		}
+		status := fmt.Sprintf("%d", r.Code)
+		if r.Error != "" {
+			status = "ERR"
+		}
+		lines = append(lines, fmt.Sprintf("%s %s  %s  %s",
+			codeStyle.Render(status),
+			bold.Render(method),
+			dim.Render(truncate(r.URL, 52)),
+			dim.Render(r.Cost.Round(time.Microsecond).String()),
+		))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func truncate(s string, n int) string {
+	rs := []rune(s)
+	if len(rs) <= n {
+		return s
+	}
+	return string(rs[:n-1]) + "…"
 }
 
 func kpi(label, value string, valueStyle lipgloss.Style) string {
@@ -219,13 +318,13 @@ func statusCodes(rs *httprecall.SnapshotReport) string {
 type Renderer struct{}
 
 func (Renderer) Render(report *httprecall.StreamReport, desc string) error {
-	return RunProgram(report.Snapshot, report.Done())
+	return RunProgram(report)
 }
 
-// RunProgram boots a full-screen Bubble Tea app for the given snapshot feed
+// RunProgram boots a full-screen Bubble Tea app for the given report feed
 // and blocks until the run completes (done closes) or the user quits.
-func RunProgram(snapFn func() *httprecall.SnapshotReport, done <-chan struct{}) error {
-	p := tea.NewProgram(New(snapFn, done))
+func RunProgram(report *httprecall.StreamReport) error {
+	p := tea.NewProgram(New(report.Snapshot, report.RecentRequests, report.RPSHistory, report.Done()))
 	_, err := p.Run()
 	return err
 }

@@ -93,6 +93,25 @@ type StreamReport struct {
 	writeBytes int64
 
 	doneChan chan struct{}
+
+	// recent keeps the last recentCap request outcomes for UI tapes.
+	recent []RecentRequest
+	// rpsHist keeps per-second RPS for UI sparklines.
+	rpsHist []float64
+}
+
+const (
+	recentCap = 30
+	rpsHistCap = 60
+)
+
+// RecentRequest is one completed request, for the live tape view.
+type RecentRequest struct {
+	Method string
+	URL    string
+	Code   int
+	Error  string
+	Cost   time.Duration
 }
 
 func NewStreamReport() *StreamReport {
@@ -132,6 +151,12 @@ func (s *StreamReport) Collect(records <-chan *ReportRecord) {
 					lastCount = s.latencyStats.count
 					lastTime = time.Now()
 
+					// append to the sparkline history
+					s.rpsHist = append(s.rpsHist, rps)
+					if len(s.rpsHist) > rpsHistCap {
+						s.rpsHist = s.rpsHist[len(s.rpsHist)-rpsHistCap:]
+					}
+
 					*s.latencyWithinSec = *latencyWithinSecTemp
 					s.rpsWithinSec = rps
 					latencyWithinSecTemp.Reset()
@@ -164,9 +189,33 @@ func (s *StreamReport) Collect(records <-chan *ReportRecord) {
 		s.readBytes = r.readBytes
 		s.writeBytes = r.writeBytes
 		s.concurrencyCount = r.concurrencyCount
+
+		// tape ring buffer
+		s.recent = append(s.recent, RecentRequest{Method: r.method, URL: r.url, Code: r.code, Error: r.error, Cost: r.cost})
+		if len(s.recent) > recentCap {
+			s.recent = s.recent[len(s.recent)-recentCap:]
+		}
 		s.lock.Unlock()
 		recordPool.Put(r)
 	}
+}
+
+// RecentRequests returns the last recentCap request outcomes (oldest first).
+func (s *StreamReport) RecentRequests() []RecentRequest {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	out := make([]RecentRequest, len(s.recent))
+	copy(out, s.recent)
+	return out
+}
+
+// RPSHistory returns the per-second RPS samples for sparklines (oldest first).
+func (s *StreamReport) RPSHistory() []float64 {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	out := make([]float64, len(s.rpsHist))
+	copy(out, s.rpsHist)
+	return out
 }
 func (s *StreamReport) copyCodes() map[int]int64 {
 	res := make(map[int]int64, len(s.codes))
