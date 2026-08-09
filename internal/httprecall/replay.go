@@ -291,7 +291,7 @@ func runReplay(cfg *Config, clientOpt ClientOpt, errWriter io.Writer) error {
 		fmt.Fprintf(os.Stderr, "@ Real-time charts is listening on http://%s\n", ln.Addr().String())
 	}
 	if ln != nil {
-		charts, err := NewCharts(ln, report.Charts, rq.Progress, desc)
+		charts, err := NewCharts(ln, report.Charts, rq.Progress, report.RecentRequests, desc)
 		if err != nil {
 			return err
 		}

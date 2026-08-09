@@ -60,6 +60,7 @@ Replay mode:
 Replaying 18 request(s) at 5.0x speed with 200 VU → http://staging.internal
 ```
 
+- [Full manual (中文)](docs/MANUAL.md)
 - [Installation](#installation)
 - [Usage](#usage)
     - [Benchmark mode](#benchmark-mode)

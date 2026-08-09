@@ -24,6 +24,7 @@ var (
 	codeView        = "code"
 	concurrencyView = "concurrency"
 	progressView    = "progress"
+	methodsView     = "methods"
 	timeFormat      = "15:04:05"
 )
 
@@ -36,11 +37,13 @@ type Charts struct {
 	ln           net.Listener
 	dataFunc     func() *ChartsReport
 	progressFunc func() ReplayProgress
+	methodsFunc  func() []RecentRequest
 }
 
-// NewCharts builds the realtime web UI. progressFunc is nil in benchmark mode.
-func NewCharts(ln net.Listener, dataFunc func() *ChartsReport, progressFunc func() ReplayProgress, desc string) (*Charts, error) {
-	return &Charts{ln: ln, dataFunc: dataFunc, progressFunc: progressFunc}, nil
+// NewCharts builds the realtime web UI. progressFunc is nil in benchmark mode;
+// methodsFunc feeds the method-colored request timeline (nil hides it).
+func NewCharts(ln net.Listener, dataFunc func() *ChartsReport, progressFunc func() ReplayProgress, methodsFunc func() []RecentRequest, desc string) (*Charts, error) {
+	return &Charts{ln: ln, dataFunc: dataFunc, progressFunc: progressFunc, methodsFunc: methodsFunc}, nil
 }
 
 func (c *Charts) Handler(ctx *fasthttp.RequestCtx) {
@@ -85,6 +88,22 @@ func (c *Charts) Handler(ctx *fasthttp.RequestCtx) {
 					"speed":    p.Speed,
 					"sim_ms":   float64(p.SimTime) / 1e6,
 					"vu":       p.VU,
+				})
+			} else {
+				values = append(values, nil)
+			}
+		case methodsView:
+			if c.methodsFunc != nil {
+				rows := c.methodsFunc()
+				methods := make([]string, 0, len(rows))
+				codes := make([]int, 0, len(rows))
+				for _, r := range rows {
+					methods = append(methods, r.Method)
+					codes = append(codes, r.Code)
+				}
+				values = append(values, map[string]any{
+					"methods": methods,
+					"codes":   codes,
 				})
 			} else {
 				values = append(values, nil)

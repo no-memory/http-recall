@@ -24,7 +24,7 @@ func newTestCharts(t *testing.T, dataFunc func() *ChartsReport) *Charts {
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 
-	charts, err := NewCharts(ln, dataFunc, nil, "test benchmark")
+	charts, err := NewCharts(ln, dataFunc, nil, nil, "test benchmark")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestChartsHandlerProgressEndpoint(t *testing.T) {
 	charts, err := NewCharts(ln, func() *ChartsReport { return nil },
 		func() ReplayProgress {
 			return ReplayProgress{Sent: 4, Total: 5, Speed: 2, SimTime: 3619 * time.Millisecond, VU: 10}
-		}, "replay test")
+		}, nil, "replay test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,5 +231,37 @@ func TestChartsHandlerProgressEndpoint(t *testing.T) {
 	got2 := decodeChartResponse(t, handleChartRequest(charts2, apiPath+progressView))
 	if string(got2.Values[0]) != "null" {
 		t.Fatalf("benchmark progress = %s, want null", got2.Values[0])
+	}
+}
+
+func TestChartsHandlerMethodsEndpoint(t *testing.T) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	charts, err := NewCharts(ln, func() *ChartsReport { return nil }, nil,
+		func() []RecentRequest {
+			return []RecentRequest{
+				{Method: "POST", Code: 201},
+				{Method: "GET", Code: 200},
+				{Method: "DELETE", Code: 500},
+			}
+		}, "methods test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := decodeChartResponse(t, handleChartRequest(charts, apiPath+methodsView))
+	var m struct {
+		Methods []string `json:"methods"`
+		Codes   []int    `json:"codes"`
+	}
+	if err := json.Unmarshal(got.Values[0], &m); err != nil {
+		t.Fatalf("methods payload invalid: %v", err)
+	}
+	if len(m.Methods) != 3 || m.Methods[0] != "POST" || m.Codes[2] != 500 {
+		t.Fatalf("methods = %+v", m)
 	}
 }

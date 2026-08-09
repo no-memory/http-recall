@@ -181,7 +181,7 @@ func Run(cfg *Config) error {
 
 	if ln != nil {
 		// serve charts data
-		charts, err := NewCharts(ln, report.Charts, nil, desc)
+		charts, err := NewCharts(ln, report.Charts, nil, report.RecentRequests, desc)
 		if err != nil {
 			return err
 		}

@@ -44,6 +44,11 @@ canvas{display:block;width:100%;height:260px}
 .prog-nums{display:flex;gap:26px;margin-top:8px;font-size:11.5px;color:var(--fg2);flex-wrap:wrap}
 .prog-nums b{color:var(--accent);font-weight:700}
 .prog-nums span:nth-child(1) b{color:var(--buy)}
+.tl{display:flex;gap:2px;flex-wrap:nowrap;overflow:hidden;margin-bottom:4px}
+.tl span{flex:0 0 auto;width:14px;height:18px;border-radius:3px;font-size:8px;line-height:18px;text-align:center;color:#03111a;font-weight:700}
+.tl-legend{display:flex;gap:12px;margin-top:6px;font-size:10.5px;color:var(--dim);flex-wrap:wrap}
+.tl-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.tl-legend .sep{color:var(--dim)}
 .foot{color:var(--dim);font-size:11px;text-align:center;margin-top:6px}
 </style>
 </head>
@@ -74,6 +79,24 @@ canvas{display:block;width:100%;height:260px}
 <div class="panel">
   <div class="panel-h">REQS/SEC <b id="ch-total">—</b> &nbsp;·&nbsp; <span id="ch-desc"></span></div>
   <canvas id="chart"></canvas>
+</div>
+
+<div class="panel">
+  <div class="panel-h">REQUEST TIMELINE — METHOD <b id="tl-count"></b></div>
+  <div style="padding:12px 14px">
+    <div class="tl" id="tl-method"></div>
+    <div class="tl" id="tl-status"></div>
+    <div class="tl-legend">
+      <span><i style="background:#38bdf8"></i>GET</span>
+      <span><i style="background:#22c55e"></i>POST</span>
+      <span><i style="background:#f59e0b"></i>PUT</span>
+      <span><i style="background:#ff4757"></i>DELETE</span>
+      <span class="sep">·</span>
+      <span><i style="background:#22c55e"></i>2xx</span>
+      <span><i style="background:#f59e0b"></i>4xx</span>
+      <span><i style="background:#ff4757"></i>5xx</span>
+    </div>
+  </div>
 </div>
 
 <div class="panel">
@@ -143,6 +166,32 @@ canvas{display:block;width:100%;height:260px}
   }
 
   function tick(){
+    fetchJSON('/data/methods', function(d){
+      var v = d.values[0];
+      var el = document.getElementById('tl-method');
+      var el2 = document.getElementById('tl-status');
+      if (v == null) { el.innerHTML = ''; el2.innerHTML = ''; return; }
+      var ms = v.methods, cs = v.codes;
+      document.getElementById('tl-count').textContent = ms.length + ' req';
+      var mColor = function(m){
+        switch ((m||'').toUpperCase()) {
+          case 'GET': return '#38bdf8';
+          case 'POST': return '#22c55e';
+          case 'PUT': return '#f59e0b';
+          case 'DELETE': return '#ff4757';
+          default: return '#5f7186';
+        }
+      };
+      el.innerHTML = ms.map(function(m){
+        return '<span style="background:' + mColor(m) + '">' +
+          (m ? m.charAt(0) : '?') + '</span>';
+      }).join('');
+      el2.innerHTML = cs.map(function(c){
+        var col = (c >= 200 && c < 400) ? '#22c55e' :
+                  (c >= 400 && c < 500) ? '#f59e0b' : '#ff4757';
+        return '<span style="background:' + col + '">' + c + '</span>';
+      }).join('');
+    });
     fetchJSON('/data/progress', function(d){
       var p = d.values[0];
       var el = document.getElementById('prog-panel');

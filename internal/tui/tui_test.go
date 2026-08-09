@@ -135,3 +135,17 @@ func TestErrorsViewListsCounts(t *testing.T) {
 		}
 	}
 }
+
+func TestMethodTimelineRenders(t *testing.T) {
+	rows := []httprecall.RecentRequest{
+		{Method: "POST", Code: 201, Cost: 1 * time.Millisecond},
+		{Method: "GET", Code: 200, Cost: 1 * time.Millisecond},
+		{Method: "DELETE", Code: 500, Cost: 1 * time.Millisecond},
+	}
+	v := methodTimeline(rows)
+	for _, want := range []string{"METHOD", "STATUS", "GET", "POST", "DEL"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("timeline missing %q\n---\n%s", want, v)
+		}
+	}
+}

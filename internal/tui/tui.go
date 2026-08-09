@@ -210,6 +210,10 @@ func (m Model) marketView() string {
 	// QPS sparkline
 	b.WriteString(panel("QPS — LAST 60s", sparkline(m.hist)))
 	b.WriteString("\n\n")
+
+	// method-colored request timeline
+	b.WriteString(panel("REQUEST TIMELINE — METHOD", methodTimeline(m.tape)))
+	b.WriteString("\n\n")
 	return b.String()
 }
 
@@ -307,6 +311,67 @@ func sparkline(data []float64) string {
 		b.WriteString(cyan.Render(string(density[idx])))
 	}
 	return b.String()
+}
+
+// methodTimeline renders the recent request sequence as a two-row colored
+// strip: method colors on top, status health below. Oldest left, newest right.
+func methodTimeline(rows []httprecall.RecentRequest) string {
+	const maxBlocks = 40
+	if len(rows) == 0 {
+		return dim.Render("waiting for traffic…")
+	}
+	// rows are newest-first; reverse to oldest-first for the timeline.
+	rr := make([]httprecall.RecentRequest, 0, len(rows))
+	for i := len(rows) - 1; i >= 0; i-- {
+		rr = append(rr, rows[i])
+	}
+	if len(rr) > maxBlocks {
+		rr = rr[len(rr)-maxBlocks:]
+	}
+
+	var m, s strings.Builder
+	for _, r := range rr {
+		mc := methodColor(r.Method)
+		m.WriteString(lipgloss.NewStyle().Foreground(mc).Render("█"))
+		if r.Code >= 200 && r.Code < 400 && r.Error == "" {
+			s.WriteString(green.Render("█"))
+		} else if r.Code >= 400 && r.Code < 500 {
+			s.WriteString(amber.Render("█"))
+		} else {
+			s.WriteString(coral.Render("█"))
+		}
+	}
+
+	legend := "GET " + methodColorDot("GET") +
+		"  POST " + methodColorDot("POST") +
+		"  PUT " + methodColorDot("PUT") +
+		"  DEL " + methodColorDot("DELETE") +
+		"   ·   2xx " + green.Render("█") +
+		"  4xx " + amber.Render("█") +
+		"  5xx " + coral.Render("█")
+
+	return "METHOD  " + m.String() + "\n" +
+		"STATUS  " + s.String() + "\n" +
+		dim.Render(legend)
+}
+
+func methodColor(m string) lipgloss.Color {
+	switch strings.ToUpper(m) {
+	case "GET":
+		return lipgloss.Color("#38bdf8")
+	case "POST":
+		return lipgloss.Color("#22c55e")
+	case "PUT":
+		return lipgloss.Color("#f59e0b")
+	case "DELETE":
+		return lipgloss.Color("#ff4757")
+	default:
+		return lipgloss.Color("#5f7186")
+	}
+}
+
+func methodColorDot(m string) string {
+	return lipgloss.NewStyle().Foreground(methodColor(m)).Render("█")
 }
 
 // tape renders request outcomes as a market-style ticker, newest first.
